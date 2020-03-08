@@ -5,11 +5,13 @@ test the interface to the bus tracker
 import unittest
 
 from TransitHelper.BusTrackerInterface import *
+import TransitHelper.Utilities as utils
 
 import logging
 #logging.basicConfig(level=logging.DEBUG)
 
 log = logging.getLogger("testBustTrackerInterface")
+
 
 class TestParsing(unittest.TestCase):
 
@@ -18,7 +20,7 @@ class TestParsing(unittest.TestCase):
         Just do basic calls to the interface functions to make sure no
         exceptions are thrown
         """
-        getTime()
+        utils.toDatetime(getTime())
         getRoutes()
         getVehiclesVIDs("8130")
         getVehiclesRoutes("72")
