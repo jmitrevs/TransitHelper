@@ -12,8 +12,8 @@ account uncertainties very well, so I wanted to
 
 This makes use of the Chicago Transit Authority (CTA) Bus Tracker
 information. One must request a token from the CTA to access the
-tracker via the web interface. In a Tokens.py file in the
-TransitHelper directory one should define a constant BUS_TOKEN to
+tracker via the web interface. In a `Tokens.py` file in the
+`TransitHelper` directory one should define a constant, `BUS_TOKEN`, to
 refer to the token.
 
 The current usage is quite basic, and requires a list of bus
