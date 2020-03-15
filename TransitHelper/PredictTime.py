@@ -10,6 +10,10 @@ import typing
 
 import TransitHelper.BusTrackerInterface as bi
 import TransitHelper.Utilities as utils
+from TransitHelper import StationDatabase
+
+import logging
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,7 +32,7 @@ class Trip:
 def predictTripTime(listOfSegments, startTime=None):
     """
     Input: An iterable of tuples, (start station, end station, {routes} ) for the route
-       If routes is empty, then any rout is fine
+       If routes is empty, then any bus route is fine
     Output: a Trip
     """
 
@@ -45,10 +49,11 @@ def predictTripTime(listOfSegments, startTime=None):
     # one should switch to using the bus schedule (currently not implmented)
 
     for segment in listOfSegments:
+        log.debug(f"Handling segment {segment}")
         if not totalPred:
             # first segment
             segTrip = predictSegmentTime(segment, startTime)
-            print(segTrip)
+            log.debug(f"first segment prediction = {segTrip}")
             if segTrip is None:
                 # There are no possibilites or predictions
                 return None
@@ -56,23 +61,29 @@ def predictTripTime(listOfSegments, startTime=None):
         else:
             # already have a segment
             walkTime = predictWalk(totalPred.endStop, segment[0])
+            log.debug(f"walkTime = {walkTime}")
             segTrip = predictSegmentTime(segment, now, useBusStartTime=True)  # using current time
+            log.debug(f"segment using now = {segTrip}")
 
             # calculating earliest time
-            bestVidMin = predictBusVID(segment, totalPred.endTimeMin + walkTime[0])
+            bestVidMin, bestSeqStartTime = predictBusVID(segment, totalPred.endTimeMin + walkTime[0])
             if bestVidMin is None:
-                # no trip or prediction available (can improve in the future)
-                return None
-            totalPred.endTimeMin += walkTime[0] + (segTrip.endTimeMin - segTrip.startTime)
-            totalPred.vidsMin.append(vestVidMin)
+                # no trip or prediction available, use schedule estimate
+                waitTime = predictWaitBasedOnSchedule(segment[0], totalPred.endTimeMin + walkTime[0], segment[2])
+                totalPred.endTimeMin += walkTime[0] + waitTime[0] + (segTrip.endTimeMin - segTrip.startTime)
+                totalPred.vidsMin.append("SCHEDULE")
+            totalPred.endTimeMin = bestSeqStartTime + (segTrip.endTimeMin - segTrip.startTime)
+            totalPred.vidsMin.append(bestVidMin)
 
             # calculatign the latest time
-            bestVidMax = predictBusVID(segment, totalPred.endTimeMax + walkTime[1])
+            bestVidMax, bestSeqStartTime = predictBusVID(segment, totalPred.endTimeMax + walkTime[1])
             if bestVidMax is None:
-                # No prediction available if connection is missed (in future version, revert to schedule)
-                totalPred.endTimeMax = datetime.max
+                # no trip or prediction available, use schedule estimate
+                waitTime = predictWaitBasedOnSchedule(segment[0], totalPred.endTimeMax + walkTime[1], segment[2])
+                totalPred.endTimeMax += walkTime[1] + waitTime[1] + (segTrip.endTimeMax - segTrip.startTime)
+                totalPred.vidsMax.append("SCHEDULE")
             else:
-                totalPred.endTimeMax += walkTime[1] + (segTrip.endTimeMax - segTrip.startTime)
+                totalPred.endTimeMax = bestSegStartTime + (segTrip.endTimeMax - segTrip.startTime)
                 totalPred.vidsMax.append(vestVidMax)
 
     return totalPred
@@ -136,12 +147,15 @@ def predictBusVID(segment, startTime=None):
     """
     Input: A (start station, end station, {buses}) tuple on a single route
     (Use any bus if buses is an empty set, or any empyt iterable), and the start time (None=now)
-    Returns the next VID for this trip
+    Returns the next VID for this trip and the start time
     """
+    log.debug(f"predictBusVID({segment}, {startTime})")
+
     if startTime is None:
         startTime = utils.toDatetime(bi.getTime())
 
     startPreds = bi.getPredictionsStops(segment[0])
+    log.debug(f"startPreds in predictBusVID: {startPreds}")
 
     bestVid = None
     bestStart = datetime.max
@@ -155,4 +169,57 @@ def predictBusVID(segment, startTime=None):
             bestVid = startPred["vid"]
             bestStart = startPredTime
 
-    return bestVid
+    log.debug("returning {bestVid}")
+    return (bestVid, bestStart)
+
+
+def predictWaitBasedOnSchedule(station, time=None, routes=None):
+    """
+    When no prediciton exists, depend on schedule.
+    If routes is none, then any routes at that stop will do
+    """
+
+    log.debug(f"time = {time}")
+    if time is None:
+        time = utils.toDatetime(bi.getTime())
+
+    isRush = False
+    if time.isoweekday() < 6 and (7 < time.hour < 10 or 15 < time.hour < 18):
+        isRush = True
+
+    # default category
+    category = StationDatabase.Categories.INFREQUENT
+
+    if routes:
+        # specfied the route, so look in pairs
+        for rt in routes:
+            if isRush and category < StationDatabase.Categories.RUSH:
+                if (station, rt) in StationDatabase.RUSH_PAIR:
+                    category = StationDatabase.Categories.RUSH
+            if category < StationDatabase.Categories.FREQUENT:
+                if (station, rt) in StationDatabase.FREQUENT_PAIR:
+                    category = StationDatabase.Categories.FREQUENT
+            if category < StationDatabase.Categories.MEDIUM:
+                if (station, rt) in StationDatabase.MEDIUM_PAIR:
+                    category = StationDatabase.Categories.MEDIUM
+    else:
+        if isRush and category < StationDatabase.Categories.RUSH:
+            if station in StationDatabase.RUSH:
+                category = StationDatabase.Categories.RUSH
+        if category < StationDatabase.Categories.FREQUENT:
+            if station in StationDatabase.FREQUENT:
+                category = StationDatabase.Categories.FREQUENT
+        if category < StationDatabase.Categories.MEDIUM:
+            if station in StationDatabase.MEDIUM:
+                category = StationDatabase.Categories.MEDIUM
+
+    # actual predictions
+    if category == StationDatabase.Categories.RUSH:
+        return (timedelta(minutes=0), timedelta(minutes=4))
+    elif category == StationDatabase.Categories.FREQUENT:
+        return (timedelta(minutes=0), timedelta(minutes=9))
+    elif category == StationDatabase.Categories.MEDIUM:
+        return (timedelta(minutes=0), timedelta(minutes=15))
+    else:
+        return (timedelta(minutes=0), timedelta(minutes=20))
+

@@ -18,5 +18,8 @@ refer to the token.
 
 The current usage is quite basic, and requires a list of bus
 stations for the routes. There is no suggesting of routes
-capability. Most of the testing/development is being done using the
+capability. The main function is `PredictTripTime` in
+`PredictTime.py`. Most of the testing/development is being done using the
 jupyter notebook.
+
+The `tests` directory provides unit tests.
