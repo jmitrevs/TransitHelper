@@ -8,9 +8,7 @@ from TransitHelper.BusTrackerInterface import *
 import TransitHelper.Utilities as utils
 
 import logging
-#logging.basicConfig(level=logging.DEBUG)
-
-log = logging.getLogger("testBustTrackerInterface")
+log = logging.getLogger(__name__)
 
 
 class TestParsing(unittest.TestCase):
@@ -22,11 +20,11 @@ class TestParsing(unittest.TestCase):
         """
         utils.toDatetime(getTime())
         getRoutes()
-        getVehiclesVIDs("8130")
+        #getVehiclesVIDs("8130")
         getVehiclesRoutes("72")
         getDirections("72")
         getStops("72", "Westbound")
         getPatternsRoute("72")
         getPatternsPIDs("96")
         getPredictionsStops("943", "72")
-        getPredictionsVIDs("8130")
+        #getPredictionsVIDs("8130")
